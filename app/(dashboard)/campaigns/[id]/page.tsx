@@ -308,6 +308,7 @@ export default function CampaignDetailPage() {
             postThumb={postThumb}
             caption=""
             sampleComment={campaign.matchAnyWord ? "nice!" : campaign.keywords[0] ?? "LINK"}
+            dmTriggerEnabled={campaign.dmTriggerEnabled}
             publicReplyEnabled={campaign.publicReplyEnabled}
             publicReplyMessage={publicReplies[0] ?? ""}
             openingDmEnabled={campaign.openingDmEnabled}
