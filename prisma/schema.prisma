@@ -205,6 +205,9 @@ model DmLog {
   status        DmStatus @default(PENDING)
   attempts      Int      @default(0)
   dmSentAt      DateTime?
+  // Set only when this log delivered the campaign's reveal/link. A force-follow
+  // prompt is a sent DM too, but must remain eligible for the five-minute reveal.
+  revealSentAt  DateTime?
   errorMessage  String?
 
   // The public comment reply is delivered independently of the DM, so its

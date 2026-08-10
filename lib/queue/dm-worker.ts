@@ -641,15 +641,38 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   const dedupeId = `reveal:${userId}`;
 
   if (fallback) {
-    const existingReveal = await prisma.dmLog.findUnique({
-      where: {
-        automationId_commentId: {
-          automationId: automation.id,
-          commentId: dedupeId,
+    const [existingReveal, latestKeywordDm] = await Promise.all([
+      prisma.dmLog.findUnique({
+        where: {
+          automationId_commentId: {
+            automationId: automation.id,
+            commentId: dedupeId,
+          },
         },
-      },
-    });
-    if (existingReveal?.status === "SENT") return;
+      }),
+      prisma.dmLog.findFirst({
+        where: {
+          automationId: automation.id,
+          commenterId: userId,
+          commentId: { startsWith: "dm:" },
+          status: "SENT",
+        },
+        orderBy: { dmSentAt: "desc" },
+        select: { revealSentAt: true },
+      }),
+    ]);
+
+    // A real postback records `reveal:<userId>`. A keyword-triggered DM keeps
+    // its per-message `dm:<messageId>` id for retry deduplication, so use its
+    // explicit reveal marker to avoid sending the same link again five minutes
+    // after an already-following user reads it. A force-follow prompt leaves
+    // revealSentAt null and therefore still receives the intended fallback.
+    if (
+      existingReveal?.status === "SENT" ||
+      latestKeywordDm?.revealSentAt
+    ) {
+      return;
+    }
   }
 
   // Personalize {username} from the opening DM log for this user, if present.
@@ -947,6 +970,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
         );
       }
 
+      const sentAt = new Date();
       await prisma.dmLog.upsert({
         where: {
           automationId_commentId: {
@@ -958,11 +982,13 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
           ...logBase,
           commenterName,
           status: "SENT",
-          dmSentAt: new Date(),
+          dmSentAt: sentAt,
+          revealSentAt: sendFollowPrompt ? null : sentAt,
         },
         update: {
           status: "SENT",
-          dmSentAt: new Date(),
+          dmSentAt: sentAt,
+          ...(sendFollowPrompt ? {} : { revealSentAt: sentAt }),
           errorMessage: null,
         },
       });

@@ -698,6 +698,57 @@ describe("DM Worker — Full Pipeline", () => {
     expect(mockReserveWorkspaceDMSend).not.toHaveBeenCalled();
   });
 
+  it("should not deliver a read fallback after a keyword DM already sent the reveal", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([]);
+    mockPrisma.automation.findFirst.mockResolvedValue({
+      ...mockAutomation,
+      trackedLinks: [],
+    });
+    mockPrisma.dmLog.findFirst.mockResolvedValue({
+      revealSentAt: new Date("2026-08-10T08:00:00.000Z"),
+    });
+
+    const processor = getProcessor();
+    await processor(
+      createMockPostbackJob({
+        instagramAccountId: "ig_456",
+        userId: "commenter_999",
+        payload: "reveal:auto_789",
+        fallback: true,
+      })
+    );
+
+    expect(mockSendDirectMessage).not.toHaveBeenCalled();
+    expect(mockReserveWorkspaceDMSend).not.toHaveBeenCalled();
+  });
+
+  it("should keep a force-follow prompt eligible for the read fallback", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([]);
+    mockPrisma.automation.findFirst.mockResolvedValue({
+      ...mockAutomation,
+      requireFollow: true,
+      trackedLinks: [],
+    });
+    mockPrisma.dmLog.findFirst
+      .mockResolvedValueOnce({ revealSentAt: null })
+      .mockResolvedValueOnce({ commenterName: "commenter_user" });
+
+    const processor = getProcessor();
+    await processor(
+      createMockPostbackJob({
+        instagramAccountId: "ig_456",
+        userId: "commenter_999",
+        payload: "reveal:auto_789",
+        fallback: true,
+      })
+    );
+
+    // The remote-main behavior intentionally bypasses the follow gate after
+    // five minutes when the user read the prompt but did not tap its button.
+    expect(mockGetUserFollowStatus).not.toHaveBeenCalled();
+    expect(mockSendDirectMessage).toHaveBeenCalled();
+  });
+
   it("should skip follow-gating for a read fallback and send the next DM", async () => {
     mockPrisma.automation.findMany.mockResolvedValue([]);
     mockPrisma.automation.findFirst.mockResolvedValue({
@@ -859,6 +910,41 @@ describe("DM Worker — DM keyword trigger", () => {
       "followcheck:auto_789"
     );
     expect(mockSendDirectMessage).not.toHaveBeenCalled();
+    expect(mockPrisma.dmLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ revealSentAt: null }),
+      })
+    );
+  });
+
+  it("should mark an immediate follower reveal so its read fallback is suppressed", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      { ...dmTriggerAutomation, requireFollow: true },
+    ]);
+    mockGetUserFollowStatus.mockResolvedValue(true);
+
+    const processor = getProcessor();
+    await processor(createMockMessageJob());
+
+    expect(mockSendDirectMessage).toHaveBeenCalled();
+    expect(mockPrisma.dmLog.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          automationId_commentId: {
+            automationId: "auto_789",
+            commentId: "dm:mid_abc",
+          },
+        },
+        create: expect.objectContaining({
+          status: "SENT",
+          revealSentAt: expect.any(Date),
+        }),
+        update: expect.objectContaining({
+          status: "SENT",
+          revealSentAt: expect.any(Date),
+        }),
+      })
+    );
   });
 
   it("should send the link when follow status cannot be verified", async () => {
