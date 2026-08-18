@@ -106,9 +106,9 @@ Optional, for tuning the polling reconciler (defaults are fine to start):
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `COMMENT_POLL_INTERVAL_MS` | `300000` | How often the worker sweeps for missed comments (5 min). |
+| `COMMENT_POLL_INTERVAL_MS` | `3600000` | How often the worker sweeps for missed comments (1 hour). Webhook-delivered comments remain immediate. |
 | `COMMENT_POLL_MAX_PER_SWEEP` | `30` | Max new comments each campaign acts on per sweep. Keep it conservative; higher gets closer to Instagram's rate limits. |
-| `COMMENT_POLL_LOOKBACK_HOURS` | `72` | How far back a sweep considers comments. |
+| `COMMENT_POLL_LOOKBACK_HOURS` | `24` | How far back a sweep considers comments. |
 
 ## The Meta app
 
