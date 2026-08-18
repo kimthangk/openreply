@@ -199,6 +199,7 @@ export async function POST(request: NextRequest) {
           automation: {
             select: {
               id: true,
+              requireFollow: true,
             },
           },
         },
@@ -215,7 +216,12 @@ export async function POST(request: NextRequest) {
           {
             instagramAccountId: event.instagramAccountId,
             userId: event.userId,
-            payload: `reveal:${automation.id}`,
+            // Continue the same sequence as a button tap. With follow-gating
+            // enabled, the fallback must show the follow prompt first rather
+            // than revealing the link directly.
+            payload: automation.requireFollow
+              ? `followcheck:${automation.id}`
+              : `reveal:${automation.id}`,
             fallback: true,
           },
           {
