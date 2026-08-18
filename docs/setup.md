@@ -44,7 +44,7 @@ Do Railway first, because Vercel needs the database URLs from it.
    Build Command:  npm run db:generate
    Start Command:  npm run worker
    ```
-   The worker only needs the generated Prisma client, not `next build`. Do not leave the build as the default `npm run build`: it runs `next build` needlessly, and any build step that reaches the database (like `prisma migrate deploy`) fails here, because the worker cannot connect to Postgres at build time. Migrations are applied by the web app's `vercel-build` (Step 3) and by the manual `db:migrate` below, never by the worker.
+   The worker only needs the generated Prisma client, not `next build`. Do not leave the build as the default `npm run build`: it runs `next build` needlessly, and any build step that reaches the database (like `prisma migrate deploy`) fails here, because the worker cannot connect to Postgres at build time. Apply migrations once with the manual `db:migrate` command below before deploying the web app; never run migrations from the worker or from concurrent web builds.
 6. Open the worker service's Variables and add all the environment variables from the [table below](#environment-variables). For the worker, use Railway's internal database and Redis hostnames (they look like `postgres.railway.internal` and `redis.railway.internal`); inside Railway's network they are faster and free of egress. `NEXTAUTH_URL` is your Vercel domain. `ENCRYPTION_KEY` must be the exact same value you will use on Vercel.
 
 Getting the connection URLs. Open the Postgres service, then its Variables or Connect tab. You will see two URLs:
@@ -73,7 +73,7 @@ DATABASE_URL="postgresql://...proxy.rlwy.net.../railway" npm run db:migrate
    - `NEXTAUTH_URL`: your Vercel domain, for example `https://your-app.vercel.app`. This is the free domain Vercel assigns on deploy.
    - `DATABASE_URL` and `REDIS_URL`: the public Railway URLs (`DATABASE_PUBLIC_URL` and `REDIS_PUBLIC_URL` from Railway).
    - `ENCRYPTION_KEY`: the exact same value as on the worker.
-3. Deploy. The build runs `prisma generate` before `next build`, so the Prisma client is generated even though it is gitignored.
+3. Apply migrations once from a trusted environment with `npm run db:migrate`, then deploy. The build runs `prisma generate` before `next build`, so the Prisma client is generated even though it is gitignored.
 4. The daily token-refresh cron is wired up in `vercel.json`.
 
 Note on crons: Vercel's free plan allows each cron to run at most once per day. The repo's crons are set to daily for that reason. The comment polling reconciler does not use a Vercel cron; it runs inside the Railway worker on its own interval, so the free plan is not a constraint there.
