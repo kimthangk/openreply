@@ -44,7 +44,7 @@ const LOOKBACK_HOURS = Number(process.env.COMMENT_POLL_LOOKBACK_HOURS ?? 24);
 const MAX_NEW_PER_SWEEP = Number(process.env.COMMENT_POLL_MAX_PER_SWEEP ?? 30);
 // For "any post" campaigns, how many recent posts to scan. Keep this bounded
 // so an hourly sweep does not walk an account's entire media history.
-const RECENT_MEDIA_LIMIT = 30;
+const RECENT_MEDIA_LIMIT = 10;
 
 interface SweepStat {
   campaign: string;
