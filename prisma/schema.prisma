@@ -201,6 +201,9 @@ model DmLog {
   commenterName String?
   commentText   String
   commentId     String
+  // Instagram media the triggering comment was on, so one any-post campaign
+  // can be broken down per post. Null for DM-keyword triggers and old rows.
+  mediaId       String?
   matchedKeyword String?
   status        DmStatus @default(PENDING)
   attempts      Int      @default(0)
@@ -227,6 +230,7 @@ model DmLog {
   @@index([workspaceId])
   @@index([automationId])
   @@index([instagramAccountId])
+  @@index([automationId, mediaId])
   @@index([status])
 }
 

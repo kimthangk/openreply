@@ -251,6 +251,38 @@ export default async function ReportPage({ params }: ReportPageProps) {
           </aside>
         </div>
 
+        {report.byPost.length > 0 && (
+          <section className="mt-8 border border-white/10 bg-white/[0.035] p-6">
+            <h2 className="text-xl font-black text-white">By Post</h2>
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="text-zinc-400">
+                  <tr>
+                    <th className="pb-3 font-semibold">Post (media id)</th>
+                    <th className="pb-3 text-right font-semibold">Comments</th>
+                    <th className="pb-3 text-right font-semibold">DMs sent</th>
+                    <th className="pb-3 text-right font-semibold">Button taps</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.byPost.map((post) => (
+                    <tr key={post.mediaId} className="border-t border-white/10">
+                      <td className="py-3 font-mono text-zinc-300">
+                        {post.mediaId}
+                      </td>
+                      <td className="py-3 text-right text-white">
+                        {post.comments}
+                      </td>
+                      <td className="py-3 text-right text-white">{post.sent}</td>
+                      <td className="py-3 text-right text-white">{post.taps}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         <section className="mt-8 border border-white/10 bg-white/[0.035] p-6">
           <h2 className="text-xl font-black text-white">Campaign Setup</h2>
           <div className="mt-5 grid gap-5 md:grid-cols-3">

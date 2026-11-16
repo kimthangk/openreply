@@ -20,7 +20,7 @@ vi.mock("@/lib/db/client", () => ({
   prisma: mockPrisma,
 }));
 
-import { getCampaignReportBySlug } from "../lib/reports/data";
+import { getCampaignReportBySlug, getPostBreakdown } from "../lib/reports/data";
 import { buildReportUrl, isReportBranded } from "../lib/reports/share";
 
 const baseAutomation = {
@@ -103,6 +103,37 @@ describe("campaign reports", () => {
     });
     expect(report?.daily).toHaveLength(7);
     expect("dmMessage" in (report?.campaign ?? {})).toBe(false);
+  });
+
+  it("breaks one campaign down per post, crediting taps to the post", async () => {
+    mockPrisma.dmLog.groupBy.mockReset();
+    mockPrisma.dmLog.groupBy
+      .mockResolvedValueOnce([
+        { mediaId: "post_a", status: "SENT", _count: { _all: 5 } },
+        { mediaId: "post_a", status: "FAILED", _count: { _all: 1 } },
+        { mediaId: "post_b", status: "SENT", _count: { _all: 9 } },
+      ])
+      .mockResolvedValueOnce([
+        { mediaId: "post_a", _count: { _all: 4 } },
+        { mediaId: "post_b", _count: { _all: 2 } },
+      ]);
+
+    const rows = await getPostBreakdown("workspace_123", "automation_123");
+
+    expect(rows).toEqual([
+      { mediaId: "post_b", comments: 9, sent: 9, taps: 2 },
+      { mediaId: "post_a", comments: 6, sent: 5, taps: 4 },
+    ]);
+    const [commentQuery, tapQuery] = mockPrisma.dmLog.groupBy.mock.calls;
+    expect(commentQuery[0].where).toMatchObject({
+      automationId: "automation_123",
+      mediaId: { not: null },
+      NOT: { commentId: { startsWith: "reveal:" } },
+    });
+    expect(tapQuery[0].where).toMatchObject({
+      commentId: { startsWith: "reveal:" },
+      status: "SENT",
+    });
   });
 
   it("returns null when a report slug is missing or disabled", async () => {

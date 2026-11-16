@@ -243,6 +243,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commenterName,
           commentText,
           commentId,
+          mediaId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "FAILED",
           errorMessage: "No Instagram access token available",
@@ -274,6 +275,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commenterName,
           commentText,
           commentId,
+          mediaId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "FAILED",
           errorMessage: "Failed to decrypt Instagram access token",
@@ -299,6 +301,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commenterName,
           commentText,
           commentId,
+          mediaId,
           matchedKeyword: matchResult.matchedKeyword,
           status: "PENDING",
           attempts: job.attemptsMade + 1,
@@ -682,6 +685,19 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   });
   const commenterName = openingLog?.commenterName ?? null;
 
+  // Credit the tap to the post of this user's latest triggering comment, so
+  // an any-post campaign can report taps per post.
+  const latestCommentLog = await prisma.dmLog.findFirst({
+    where: {
+      automationId: automation.id,
+      commenterId: userId,
+      mediaId: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { mediaId: true },
+  });
+  const mediaId = latestCommentLog?.mediaId ?? null;
+
   let accessToken: string;
   try {
     accessToken = decryptToken(automation.instagramAccount.accessToken);
@@ -735,10 +751,11 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commenterName,
         commentText: "(button tap)",
         commentId: dedupeId,
+        mediaId,
         status: "SKIPPED_PLAN_LIMIT",
         errorMessage: `Monthly DM limit reached (${usage.limit})`,
       },
-      update: { status: "SKIPPED_PLAN_LIMIT" },
+      update: { status: "SKIPPED_PLAN_LIMIT", mediaId },
     });
     return;
   }
@@ -763,10 +780,11 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commenterName,
         commentText: "(button tap)",
         commentId: dedupeId,
+        mediaId,
         status: "SENT",
         dmSentAt: new Date(),
       },
-      update: { status: "SENT", dmSentAt: new Date(), errorMessage: null },
+      update: { status: "SENT", dmSentAt: new Date(), errorMessage: null, mediaId },
     });
   } catch (error) {
     await releaseWorkspaceDMReservation(automation.workspaceId, usage.periodStart);
@@ -782,10 +800,11 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         commenterName,
         commentText: "(button tap)",
         commentId: dedupeId,
+        mediaId,
         status: "FAILED",
         errorMessage: formatError(error),
       },
-      update: { status: "FAILED", errorMessage: formatError(error) },
+      update: { status: "FAILED", errorMessage: formatError(error), mediaId },
     });
     throw error;
   }

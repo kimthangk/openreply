@@ -25,6 +25,69 @@ function getDayWindow(daysAgo: number) {
   return { start, end };
 }
 
+export type PostBreakdownRow = {
+  mediaId: string;
+  comments: number;
+  sent: number;
+  taps: number;
+};
+
+// Per-post counts for one campaign. Comment logs carry the post they came from;
+// button-tap logs (`reveal:<userId>`) are credited to the tapper's latest post.
+export async function getPostBreakdown(
+  workspaceId: string,
+  automationId: string
+): Promise<PostBreakdownRow[]> {
+  const [commentRows, tapRows] = await Promise.all([
+    prisma.dmLog.groupBy({
+      by: ["mediaId", "status"],
+      where: {
+        workspaceId,
+        automationId,
+        mediaId: { not: null },
+        NOT: { commentId: { startsWith: "reveal:" } },
+      },
+      _count: { _all: true },
+    }),
+    prisma.dmLog.groupBy({
+      by: ["mediaId"],
+      where: {
+        workspaceId,
+        automationId,
+        mediaId: { not: null },
+        commentId: { startsWith: "reveal:" },
+        status: "SENT",
+      },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const byPost = new Map<string, PostBreakdownRow>();
+  const row = (mediaId: string) => {
+    let entry = byPost.get(mediaId);
+    if (!entry) {
+      entry = { mediaId, comments: 0, sent: 0, taps: 0 };
+      byPost.set(mediaId, entry);
+    }
+    return entry;
+  };
+
+  for (const r of commentRows ?? []) {
+    if (!r.mediaId) continue;
+    const entry = row(r.mediaId);
+    entry.comments += r._count._all;
+    if (r.status === "SENT") entry.sent += r._count._all;
+  }
+  for (const r of tapRows ?? []) {
+    if (!r.mediaId) continue;
+    row(r.mediaId).taps += r._count._all;
+  }
+
+  return [...byPost.values()].sort(
+    (a, b) => b.comments - a.comments || b.taps - a.taps
+  );
+}
+
 export async function getCampaignReportBySlug(shareSlug: string) {
   const automation = await prisma.automation.findFirst({
     where: {
@@ -116,6 +179,10 @@ export async function getCampaignReportBySlug(shareSlug: string) {
       _count: row._count._all,
     }))
   );
+  const byPost = await getPostBreakdown(
+    automation.workspaceId,
+    automation.id
+  );
   const daily = await Promise.all(
     Array.from({ length: 7 }, async (_, index) => {
       const daysAgo = 6 - index;
@@ -176,6 +243,7 @@ export async function getCampaignReportBySlug(shareSlug: string) {
       latestSentAt: latestSentLog?.dmSentAt ?? latestSentLog?.createdAt ?? null,
     },
     topKeywords,
+    byPost,
     daily,
     trackedLinks: automation.trackedLinks.map((link) => ({
       slug: link.slug,

@@ -131,4 +131,30 @@ describe("matchKeywords — edge cases", () => {
     const result = matchKeywords("I want more info please", ["more info"], true);
     expect(result.matched).toBe(true);
   });
+
+  it("should keep Thai text when stripping special characters", () => {
+    expect(stripSpecialCharacters("แอป!")).toBe("แอป");
+    expect(stripSpecialCharacters("แอ๊พ 💚")).toBe("แอ๊พ");
+  });
+
+  it("should match a Thai keyword inside a Thai sentence (partial)", () => {
+    const result = matchKeywords("อยากได้แอปค่ะ", ["แอป"], false);
+    expect(result).toEqual({ matched: true, matchedKeyword: "แอป" });
+  });
+
+  it("should match Thai spelling variants with tone marks", () => {
+    const result = matchKeywords("ขอแอ๊พหน่อย", ["แอป", "แอพ", "แอ๊พ"], false);
+    expect(result.matched).toBe(true);
+    expect(result.matchedKeyword).toBe("แอ๊พ");
+  });
+
+  it("should match a Thai keyword standing alone with whole-word on", () => {
+    expect(matchKeywords("แอป", ["แอป"], true).matched).toBe(true);
+    expect(matchKeywords("แอป 🙏", ["แอป"], true).matched).toBe(true);
+  });
+
+  it("should match an English keyword next to Thai text only when separated", () => {
+    expect(matchKeywords("ขอ app หน่อย", ["app"], true).matched).toBe(true);
+    expect(matchKeywords("happy", ["app"], true).matched).toBe(false);
+  });
 });
