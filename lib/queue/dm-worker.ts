@@ -22,7 +22,10 @@ import {
   sendPrivateReplyWithLinkButton,
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
-import { matchKeywords } from "@/lib/utils/keyword-matcher";
+import {
+  matchKeywords,
+  matchWholeMessage,
+} from "@/lib/utils/keyword-matcher";
 import { reserveDMSlot } from "@/lib/utils/rate-limiter";
 import {
   releaseWorkspaceDMReservation,
@@ -843,11 +846,13 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   for (const automation of automations) {
     const matchResult = automation.matchAnyWord
       ? { matched: true, matchedKeyword: null }
-      : matchKeywords(
-          messageText,
-          automation.keywords,
-          automation.wholeWordMatch
-        );
+      : automation.dmWholeMessageOnly
+        ? matchWholeMessage(messageText, automation.keywords)
+        : matchKeywords(
+            messageText,
+            automation.keywords,
+            automation.wholeWordMatch
+          );
 
     if (!matchResult.matched) continue;
 

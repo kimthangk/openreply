@@ -82,9 +82,15 @@ vi.mock("@/lib/meta/oauth", () => ({
   decryptToken: mockDecryptToken,
 }));
 
-vi.mock("@/lib/utils/keyword-matcher", () => ({
-  matchKeywords: mockMatchKeywords,
-}));
+vi.mock("@/lib/utils/keyword-matcher", async () => {
+  const actual = await vi.importActual<
+    typeof import("../lib/utils/keyword-matcher")
+  >("../lib/utils/keyword-matcher");
+  return {
+    matchKeywords: mockMatchKeywords,
+    matchWholeMessage: actual.matchWholeMessage,
+  };
+});
 
 vi.mock("@/lib/utils/rate-limiter", () => ({
   reserveDMSlot: mockReserveDMSlot,
@@ -809,6 +815,24 @@ describe("DM Worker — DM keyword trigger", () => {
 
   beforeEach(() => {
     mockPrisma.automation.findMany.mockResolvedValue([dmTriggerAutomation]);
+  });
+
+  it("with dmWholeMessageOnly, replies only when the whole DM is a keyword", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([
+      { ...dmTriggerAutomation, dmWholeMessageOnly: true },
+    ]);
+    const processor = getProcessor();
+
+    await processor(createMockMessageJob({ messageText: "the link is broken" }));
+    expect(mockMatchKeywords).not.toHaveBeenCalled();
+    expect(mockPrisma.dmLog.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.dmLog.create).not.toHaveBeenCalled();
+
+    await processor(createMockMessageJob({ messageText: "Link! 🙏" }));
+    expect(
+      mockPrisma.dmLog.upsert.mock.calls.length +
+        mockPrisma.dmLog.create.mock.calls.length
+    ).toBeGreaterThan(0);
   });
 
   it("should reply to a DM whose text matches the campaign keywords", async () => {

@@ -84,3 +84,25 @@ export function matchKeywords(
 
   return { matched: false, matchedKeyword: null };
 }
+
+/**
+ * Match only when the whole message is one of the keywords (ignoring case,
+ * emojis and punctuation). Used for DM triggers on brand accounts, where a
+ * longer message that mentions the keyword ("the app crashes") is usually a
+ * support question, not a request for the link.
+ */
+export function matchWholeMessage(
+  messageText: string,
+  keywords: string[]
+): KeywordMatchResult {
+  const cleanedText = stripSpecialCharacters(messageText ?? "").toLowerCase();
+  if (!cleanedText) return { matched: false, matchedKeyword: null };
+
+  for (const keyword of keywords) {
+    const cleanedKeyword = stripSpecialCharacters(keyword).toLowerCase();
+    if (cleanedKeyword && cleanedKeyword === cleanedText) {
+      return { matched: true, matchedKeyword: keyword };
+    }
+  }
+  return { matched: false, matchedKeyword: null };
+}

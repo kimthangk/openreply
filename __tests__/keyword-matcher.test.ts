@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import {
   matchKeywords,
+  matchWholeMessage,
   stripSpecialCharacters,
 } from "../lib/utils/keyword-matcher";
 
@@ -156,5 +157,19 @@ describe("matchKeywords — edge cases", () => {
   it("should match an English keyword next to Thai text only when separated", () => {
     expect(matchKeywords("ขอ app หน่อย", ["app"], true).matched).toBe(true);
     expect(matchKeywords("happy", ["app"], true).matched).toBe(false);
+  });
+});
+
+describe("matchWholeMessage", () => {
+  it("matches a message that is only the keyword", () => {
+    expect(matchWholeMessage("APP", ["app"]).matched).toBe(true);
+    expect(matchWholeMessage("app!! 🙏", ["app"]).matched).toBe(true);
+    expect(matchWholeMessage("แอพ", ["แอป", "แอพ"]).matchedKeyword).toBe("แอพ");
+  });
+
+  it("ignores longer messages that only mention the keyword", () => {
+    expect(matchWholeMessage("the app crashes", ["app"]).matched).toBe(false);
+    expect(matchWholeMessage("แอปค้าง", ["แอป"]).matched).toBe(false);
+    expect(matchWholeMessage("", ["app"]).matched).toBe(false);
   });
 });

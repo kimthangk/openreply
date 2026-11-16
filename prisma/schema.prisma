@@ -161,6 +161,9 @@ model Automation {
   // keywords above. Independent of the post trigger — a DM has no media, so
   // postId / matchAnyPost do not apply to it.
   dmTriggerEnabled Boolean @default(false)
+  // DM trigger fires only when the whole message is a keyword (e.g. "APP"),
+  // not when a longer message merely contains it.
+  dmWholeMessageOnly Boolean @default(false)
   dmMessage      String
   openingDmEnabled     Boolean @default(false)
   openingDmMessage     String?
