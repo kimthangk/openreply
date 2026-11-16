@@ -121,7 +121,11 @@ vi.mock("bullmq", () => {
   };
 });
 
-import { createDMWorker } from "../lib/queue/dm-worker";
+import {
+  createDMWorker,
+  isStaleJob,
+  STALE_JOB_MAX_AGE_MS,
+} from "../lib/queue/dm-worker";
 
 const usagePeriodStart = new Date("2026-05-01T00:00:00.000Z");
 
@@ -168,6 +172,7 @@ function getProcessor(): (job: {
   data: typeof mockJobData | Record<string, unknown>;
   id: string;
   attemptsMade: number;
+  timestamp?: number;
 }) => Promise<void> {
   createDMWorker();
   return (global as Record<string, unknown>).__dmWorkerProcessor as (job: {
@@ -997,5 +1002,60 @@ describe("DM Worker — DM keyword trigger", () => {
         create: expect.objectContaining({ status: "FAILED" }),
       })
     );
+  });
+});
+
+describe("DM Worker — stale job guard", () => {
+  it("treats only jobs older than 24 h as stale", () => {
+    const now = Date.UTC(2026, 10, 16, 12);
+    expect(isStaleJob(now - STALE_JOB_MAX_AGE_MS - 1, now)).toBe(true);
+    expect(isStaleJob(now - STALE_JOB_MAX_AGE_MS + 60_000, now)).toBe(false);
+    expect(isStaleJob(undefined, now)).toBe(false);
+  });
+
+  it("skips a stale comment job without replying or logging a DM", async () => {
+    mockPrisma.instagramAccount.findUnique.mockResolvedValue({
+      workspaceId: "workspace_123",
+    });
+    const processor = getProcessor();
+
+    await processor({
+      ...createMockJob(),
+      timestamp: Date.now() - 3 * 24 * 60 * 60 * 1000,
+    });
+
+    expect(mockPrisma.automation.findMany).not.toHaveBeenCalled();
+    expect(mockSendPrivateReply).not.toHaveBeenCalled();
+    expect(mockPrisma.dmLog.create).not.toHaveBeenCalled();
+    expect(mockPrisma.operationalEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        workspaceId: "workspace_123",
+        level: "WARNING",
+        payload: expect.objectContaining({
+          commentId: "comment_555",
+          ageHours: 72,
+        }),
+      }),
+    });
+  });
+
+  it("skips a stale button tap without sending the link", async () => {
+    const processor = getProcessor();
+
+    await processor({
+      ...createMockPostbackJob(),
+      timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000,
+    });
+
+    expect(mockPrisma.automation.findFirst).not.toHaveBeenCalled();
+    expect(mockSendDirectMessageWithLinkButton).not.toHaveBeenCalled();
+  });
+
+  it("still processes a fresh comment job", async () => {
+    const processor = getProcessor();
+
+    await processor({ ...createMockJob(), timestamp: Date.now() - 60_000 });
+
+    expect(mockSendPrivateReply).toHaveBeenCalled();
   });
 });

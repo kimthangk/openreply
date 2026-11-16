@@ -1041,7 +1041,56 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   }
 }
 
+// Jobs queued longer ago than this are dropped, not answered. If the worker is
+// down for a while (laptop asleep, host restart), the queue fills with old
+// comments; replying to them days later reads as spam and burns DM rate limit.
+export const STALE_JOB_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function isStaleJob(
+  enqueuedAt: number | undefined,
+  now: number = Date.now()
+): boolean {
+  return typeof enqueuedAt === "number" && now - enqueuedAt > STALE_JOB_MAX_AGE_MS;
+}
+
+async function skipStaleJob(job: Job<DmQueueJob>): Promise<void> {
+  const ageHours = Math.round((Date.now() - job.timestamp) / 3_600_000);
+  const commentId = "commentId" in job.data ? job.data.commentId : null;
+  console.log(
+    `[DM Worker] Skipping stale job ${job.id} (${job.name}, ${ageHours} h old)`
+  );
+  try {
+    const account = await prisma.instagramAccount.findUnique({
+      where: { instagramId: job.data.instagramAccountId },
+      select: { workspaceId: true },
+    });
+    await prisma.operationalEvent.create({
+      data: {
+        workspaceId: account?.workspaceId ?? null,
+        source: "WORKER",
+        level: "WARNING",
+        message: `Skipped stale DM job ${job.id ?? "unknown"} (${ageHours} h old)`,
+        payload: {
+          jobId: job.id ?? null,
+          jobName: job.name ?? null,
+          ageHours,
+          instagramAccountId: job.data.instagramAccountId,
+          commentId,
+        },
+      },
+    });
+  } catch (error) {
+    console.error(
+      "[DM Worker] Failed to record stale job skip:",
+      formatError(error)
+    );
+  }
+}
+
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
+  if (isStaleJob(job.timestamp)) {
+    return skipStaleJob(job);
+  }
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
   }
